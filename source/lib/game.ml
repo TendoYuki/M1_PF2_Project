@@ -4,18 +4,22 @@ open Iterator
 
 type vec = float * float
 
+
+(* La balle *)
 type ball = {
   pos : vec;
   vel : vec;
   radius : float;
 }
 
+(* La raquette, on appelle la raquette, la barre qui bouge avec notre souris *)
 type paddle = {
   x : float;
   width : float;
   height : float;
 }
 
+(* Les briques à casser *)
 type brick = {
   x : float;
   y : float;
@@ -25,6 +29,7 @@ type brick = {
   alive : bool;
 }
 
+
 type etat = {
   ball : ball;
   paddle : paddle;
@@ -32,12 +37,17 @@ type etat = {
   score : int;
   lives : int;
   stuck : bool;          (* balle collée à la raquette *)
-  pressed_space : bool;  (* état précédent de la touche espace *)
-}
+  (* 
+    état précédent de la touche espace, 
+    PS : c'est pour empecher d'appuyer 20 fois sur espace et 
+    que le jeu relance la balle sans qu'on le veuille
+  *)
+  pressed_space : bool;  
+  }
 
 (* --- Constantes du jeu --- *)
 
-let dt = 1. /. 60.
+let dt = 1. /. 60. (* la meme que sur le fichier newtonoid.ml *)
 
 let box_infx = 10.
 let box_infy = 10.
@@ -72,11 +82,14 @@ let init_bricks =
   in
   rows 300. []
 
+
+(* Mettre la balle collée à la raquette au début *)
 let ball_on_paddle paddle =
   let py = 20. +. paddle.height +. 10. in
   let px = paddle.x in
   { pos = (px, py); vel = (120., 200.); radius = 8. }
 
+(* Etat de départ *)
 let init_state = {
   ball = ball_on_paddle init_paddle;
   paddle = init_paddle;
@@ -88,7 +101,10 @@ let init_state = {
 }
 
 (* --- Utilitaires --- *)
-
+(* 
+  Petit bout de code qui coince la valeur x entre a et b 
+  Utile pour notre raquette pour qu'elle ne sorte pas de l'écran
+*)
 let clamp x a b =
   if x < a then a else if x > b then b else x
 
