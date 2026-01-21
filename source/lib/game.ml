@@ -1,5 +1,8 @@
 open Iterator
 
+(* Initialisation du générateur aléatoire *)
+let () = Random.self_init ()
+
 (* --- Types du jeu --- *)
 
 type vec = float * float
@@ -9,6 +12,7 @@ type vec = float * float
 type ball = {
   pos : vec;
   vel : vec;
+  acc : vec; 
   radius : float;
 }
 
@@ -43,6 +47,7 @@ type etat = {
     que le jeu relance la balle sans qu'on le veuille
   *)
   pressed_space : bool;  
+  current_speed : float; (* facteur multiplicatif *)
   }
 
 (* --- Constantes du jeu --- *)
@@ -54,11 +59,18 @@ let box_infy = 10.
 let box_supx = 790.
 let box_supy = 590.
 
+(* Gravité*)
+let gravity = (0., -20.)  
+
+(* Facteur accélération constante de la balle au fil du temps *)
+let ball_acceleration = 1.015
+
 (* --- Initialisation --- *)
 
 let init_ball = {
   pos = (400., 300.);
   vel = (120., 200.);
+  acc = gravity;
   radius = 8.;
 }
 
@@ -84,21 +96,41 @@ let init_bricks =
 
 
 (* Mettre la balle collée à la raquette au début *)
-let ball_on_paddle paddle =
+let ball_on_paddle paddle speed =
   let py = 20. +. paddle.height +. 10. in
   let px = paddle.x in
-  { pos = (px, py); vel = (120., 200.); radius = 8. }
+  (* Direction aléatoire *)
+  let direction = if Random.bool () then 1. else -1. in
+  (* Vitesse augmente avec speed *)
+  let vx = 120. *. speed *. direction in
+  let vy = 200. *. speed in
+  { pos = (px, py); 
+    vel = (vx, vy);  
+    acc = gravity; 
+    radius = 8. 
+  }
 
 (* Etat de départ *)
 let init_state = {
-  ball = ball_on_paddle init_paddle;
+  ball = ball_on_paddle init_paddle 1.0;
   paddle = init_paddle;
   bricks = init_bricks;
   score = 0;
   lives = 3;
   stuck = true;
   pressed_space = false;
+  current_speed = 1.0; 
 }
+
+(* Intégration : calcule position et vitesse à partir de l'accélération *)
+let integrate (pos_x, pos_y) (vel_x, vel_y) (acc_x, acc_y) dt =
+  (* Nouvelle vitesse : v' = v + a * dt *)
+  let vel_x' = vel_x +. acc_x *. dt in
+  let vel_y' = vel_y +. acc_y *. dt in
+  (* Nouvelle position : p' = p + v' * dt *)
+  let pos_x' = pos_x +. vel_x' *. dt in
+  let pos_y' = pos_y +. vel_y' *. dt in
+  ((pos_x', pos_y'), (vel_x', vel_y'))
 
 (* --- Utilitaires --- *)
 (* 
@@ -130,47 +162,89 @@ let step etat =
 
   (* Si balle collée *)
   if etat.stuck then
-    let ball = ball_on_paddle paddle in
+    let ball = ball_on_paddle paddle etat.current_speed in  
     if just_pressed_space then
       { etat with ball; paddle; stuck = false; pressed_space = space_now }
     else
       { etat with ball; paddle; pressed_space = space_now }
 
   else
-    (* Mouvement normal *)
-    let (bx, by) = etat.ball.pos in
-    let (vx, vy) = etat.ball.vel in
-
-    let nx = bx +. vx *. dt in
-    let ny = by +. vy *. dt in
-
-    let nx, vx =
-      if nx -. etat.ball.radius < box_infx then
-        (box_infx +. etat.ball.radius, -. vx)
-      else if nx +. etat.ball.radius > box_supx then
-        (box_supx -. etat.ball.radius, -. vx)
-      else (nx, vx)
+    let ball = etat.ball in
+    
+    let (new_pos, new_vel) = 
+      integrate ball.pos ball.vel ball.acc dt
+    in
+    
+    let (nx, ny) = new_pos in
+    let (vx, vy) = new_vel in
+    
+    (* Gestion des rebonds sur les murs latéraux *)
+    let nx, vx, acc_x =
+      if nx -. ball.radius < box_infx then
+        (* Rebond mur gauche *)
+        let vx' = -. vx *. ball_acceleration in  
+        (box_infx +. ball.radius, vx', fst ball.acc)
+      else if nx +. ball.radius > box_supx then
+        (* Rebond mur droit *)
+        let vx' = -. vx *. ball_acceleration in  
+        (box_supx -. ball.radius, vx', fst ball.acc)
+      else 
+        (nx, vx, fst ball.acc)
     in
 
-    let ny, vy =
-      if ny +. etat.ball.radius > box_supy then
-        (box_supy -. etat.ball.radius, -. vy)
-      else (ny, vy)
+    (* Gestion du rebond sur le plafond *)
+    let ny, vy, acc_y =
+      if ny +. ball.radius > box_supy then
+
+        let vy' = -. vy *. ball_acceleration in  
+        (box_supy -. ball.radius, vy', snd ball.acc)
+      else 
+        (ny, vy, snd ball.acc)
+    in
+        
+    (* Gestion du rebond sur la raquette *)
+    let paddle_top = 20. +. paddle.height in
+    let paddle_left = paddle.x -. paddle.width /. 2. in
+    let paddle_right = paddle.x +. paddle.width /. 2. in
+
+    let ny, vy, acc_y =
+      (*balle touche dessus de raquette *)
+      if ny -. ball.radius <= paddle_top 
+        && ny -. ball.radius >= 20.
+        && nx >= paddle_left 
+        && nx <= paddle_right
+        && vy < 0.  (* La balle descend *)
+      then
+        let vy' = -. vy *. ball_acceleration in  (* Inverse + accélère *)
+        (paddle_top +. ball.radius, vy', acc_y)  (* Repositionne sur la raquette *)
+      else
+        (ny, vy, acc_y)
     in
 
-    if ny -. etat.ball.radius < box_infy then
+    (* Si la balle tombe en dessous du sol : perte de vie *)
+    if ny -. ball.radius < box_infy then
       { etat with
-        ball = ball_on_paddle paddle;
+        ball = ball_on_paddle paddle 1.0; 
         paddle;
         lives = max 0 (etat.lives - 1);
         stuck = true;
         pressed_space = space_now;
+        current_speed = 1.0;  
       }
     else
+      (* Calculer la magnitude après les rebonds *)
+      let speed_magnitude = sqrt (vx *. vx +. vy *. vy) in
+      let initial_speed = sqrt (120. *. 120. +. 200. *. 200.) in
+      let new_speed = speed_magnitude /. initial_speed in
       { etat with
-        ball = { etat.ball with pos = (nx, ny); vel = (vx, vy) };
+        ball = { ball with 
+                pos = (nx, ny); 
+                vel = (vx, vy);
+                acc = (acc_x, acc_y)
+              };
         paddle;
         pressed_space = space_now;
+        current_speed = new_speed;  
       }
 
 (* --- Flux d'états --- *)
@@ -184,3 +258,5 @@ let flux_etat etat0 =
 
 let game_hello () =
   print_endline "Hello, Newtonoiders!"
+
+
