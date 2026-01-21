@@ -60,7 +60,7 @@ let box_supx = 790.
 let box_supy = 590.
 
 (* Gravité*)
-let gravity = (0., -20.)  
+let gravity = (0., -20.)
 
 (* Facteur accélération constante de la balle au fil du temps *)
 let ball_acceleration = 1.015
@@ -140,6 +140,14 @@ let integrate (pos_x, pos_y) (vel_x, vel_y) (acc_x, acc_y) dt =
 let clamp x a b =
   if x < a then a else if x > b then b else x
 
+(* Détection collision cercle-rectangle *)
+let circle_aabb_collision (cx, cy) radius (bx, by, bw, bh) =
+  let closest_x = clamp cx bx (bx +. bw) in
+  let closest_y = clamp cy by (by +. bh) in
+  let dx = cx -. closest_x in
+  let dy = cy -. closest_y in
+  let distance = sqrt (dx *. dx +. dy *. dy) in
+  distance < radius
 (* --- Mise à jour du jeu (une frame) --- *)
 
 let step etat =
@@ -221,6 +229,24 @@ let step etat =
         (ny, vy, acc_y)
     in
 
+    (* Collision avec briques *)
+    let hit_brick = ref false in
+    let bricks', score_bonus = 
+      List.fold_left (fun (bricks_acc, score_acc) brick ->
+        if brick.alive && circle_aabb_collision (nx, ny) ball.radius 
+                          (brick.x, brick.y, brick.w, brick.h) then
+          begin
+            hit_brick := true;
+            let dead_brick = { brick with alive = false } in
+            (dead_brick :: bricks_acc, score_acc + brick.value)
+          end
+        else
+          (brick :: bricks_acc, score_acc)
+      ) ([], 0) etat.bricks
+    in
+    let bricks' = List.rev bricks' in
+    let vy = if !hit_brick then -. vy *. ball_acceleration else vy in
+
     (* Si la balle tombe en dessous du sol : perte de vie *)
     if ny -. ball.radius < box_infy then
       { etat with
@@ -237,14 +263,12 @@ let step etat =
       let initial_speed = sqrt (120. *. 120. +. 200. *. 200.) in
       let new_speed = speed_magnitude /. initial_speed in
       { etat with
-        ball = { ball with 
-                pos = (nx, ny); 
-                vel = (vx, vy);
-                acc = (acc_x, acc_y)
-              };
+        ball = { ball with pos = (nx, ny); vel = (vx, vy); acc = (acc_x, acc_y) };
         paddle;
         pressed_space = space_now;
-        current_speed = new_speed;  
+        current_speed = new_speed;
+        bricks = bricks';
+        score = etat.score + score_bonus;
       }
 
 (* --- Flux d'états --- *)
@@ -252,8 +276,11 @@ let step etat =
 let flux_etat etat0 =
   Flux.unfold
     (fun etat ->
-       let etat' = step etat in
-       Some (etat, etat'))
+       if etat.lives <= 0 then
+         None  
+       else
+         let etat' = step etat in
+         Some (etat, etat'))
     etat0
 
 let game_hello () =

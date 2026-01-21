@@ -48,7 +48,12 @@ let draw_state etat =
     if b.alive then
       Graphics.fill_rect (int_of_float b.x) (int_of_float b.y)
         (int_of_float b.w) (int_of_float b.h)
-  ) etat.bricks
+  ) etat.bricks;
+
+  (* Affichage score et vies *)
+  Graphics.set_color Graphics.white;
+  Graphics.moveto 20 570;
+  Graphics.draw_string (Printf.sprintf "Score: %d    Vies: %d" etat.score etat.lives)
 
 (* extrait le score courant d'un etat : *)
 let score etat : int = etat.score
@@ -62,7 +67,7 @@ let draw flux_etat =
       draw_state etat;
       Graphics.synchronize ();
       Unix.sleepf Init.dt;
-      loop flux_etat' (last_score + score etat)
+      loop flux_etat' (score etat)
     | _ -> assert false
   in
   Graphics.open_graph graphic_format;
