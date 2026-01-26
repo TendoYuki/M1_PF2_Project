@@ -1,7 +1,6 @@
 (* ouvre la bibliotheque de modules definis dans lib/ *)
 open Libnewtonoid
 open Iterator
-
 (* exemple d'ouvertue d'un tel module de la bibliotheque : *)
 open Game
 
@@ -43,17 +42,41 @@ let draw_state etat =
     (int_of_float w) (int_of_float h);
 
   (* briques *)
-  Graphics.set_color Graphics.green;
   List.iter (fun b ->
-    if b.alive then
+    if b.alive then begin
+      (* Couleur selon valeur *)
+      let color = match b.value with
+        | 50 -> Graphics.green
+        | 100 -> Graphics.yellow
+        | 150 -> Graphics.red
+        | 200 -> Graphics.magenta
+        | _ -> Graphics.cyan
+      in
+      Graphics.set_color color;
       Graphics.fill_rect (int_of_float b.x) (int_of_float b.y)
         (int_of_float b.w) (int_of_float b.h)
+    end
   ) etat.bricks;
 
   (* Affichage score et vies *)
   Graphics.set_color Graphics.white;
   Graphics.moveto 20 570;
-  Graphics.draw_string (Printf.sprintf "Score: %d    Vies: %d" etat.score etat.lives)
+  Graphics.draw_string (Printf.sprintf "Score: %d    Vies: %d" etat.score etat.lives);
+
+  (* Affichage power-ups *)
+  List.iter (fun pup ->
+    if pup.active then begin
+      (* Couleur selon type *)
+      let color = match pup.ptype with
+        | PaddleWide -> Graphics.cyan
+        | BallSlow -> Graphics.blue
+        | ExtraLife -> Graphics.yellow
+        | PaddleNarrow -> Graphics.green  
+      in
+      Graphics.set_color color;
+      Graphics.fill_circle (int_of_float pup.x) (int_of_float pup.y) 8
+    end
+  ) etat.powerups
 
 (* extrait le score courant d'un etat : *)
 let score etat : int = etat.score
@@ -72,11 +95,61 @@ let draw flux_etat =
   in
   Graphics.open_graph graphic_format;
   Graphics.auto_synchronize false;
-  let score = loop flux_etat 0 in
-  Format.printf "Score final : %d@\n" score;
-  Graphics.close_graph ()
+  let final_score = loop flux_etat 0 in
+  
+  (* Écran Game Over *)
+  Graphics.clear_graph ();
+  Graphics.set_color Graphics.black;
+  Graphics.fill_rect 0 0 800 600;
+  
+  Graphics.set_color Graphics.white;
+  Graphics.moveto 250 350;
+  Graphics.draw_string "GAME OVER";
+  
+  Graphics.moveto 200 300;
+  Graphics.draw_string (Printf.sprintf "Score final : %d" final_score);
+  
+  Graphics.moveto 200 250;
+  Graphics.draw_string "Appuyez sur R pour rejouer";
+  
+  Graphics.moveto 200 220;
+  Graphics.draw_string "Appuyez sur Q pour quitter";
+  
+  Graphics.synchronize ();
+  
+  (* Attendre le choix du joueur *)
+  let rec wait_choice () =
+    if Graphics.key_pressed () then
+      let key = Graphics.read_key () in
+      match key with
+      | 'r' | 'R' -> 
+          Graphics.clear_graph ();
+          true  (* Rejouer *)
+      | 'q' | 'Q' -> 
+          false  (* Quitter *)
+      | _ -> 
+          Unix.sleepf 0.01;
+          wait_choice ()
+    else (
+      Unix.sleepf 0.01;
+      wait_choice ()
+    )
+  in
+  
+  let replay = wait_choice () in
+  
+  if not replay then (
+    Format.printf "Score final : %d@\n" final_score;
+    Graphics.close_graph ()
+  );
+  
+  replay
 
-(* LIGNE FINALE : on lance réellement le jeu *)
+(* on lance le jeu *)
 let () =
-  let flux = flux_etat init_state in
-  draw flux
+  let rec game_loop () =
+    let flux = flux_etat init_state in
+    let replay = draw flux in
+    if replay then game_loop ()
+  in
+  game_loop ()
