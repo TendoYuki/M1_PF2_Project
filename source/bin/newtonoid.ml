@@ -1,8 +1,8 @@
-(* ouvre la bibliotheque de modules definis dans lib/ *)
 open Libnewtonoid
 open Iterator
-(* exemple d'ouvertue d'un tel module de la bibliotheque : *)
 open Game
+open Vector
+open Types
 
 module Init = struct
   let dt = 1. /. 60. (* 60 Hz *)
@@ -28,7 +28,8 @@ let draw_state etat =
   Graphics.fill_rect 0 0 800 600;
 
   (* balle *)
-  let (bx, by) = etat.ball.pos in
+  let ball_pos = Vector.to_tuple etat.ball.pos in
+  let (bx, by) = ball_pos in
   Graphics.set_color Graphics.red;
   Graphics.fill_circle (int_of_float bx) (int_of_float by)
     (int_of_float etat.ball.radius);
@@ -41,10 +42,9 @@ let draw_state etat =
   Graphics.fill_rect (int_of_float (px -. w /. 2.)) 20
     (int_of_float w) (int_of_float h);
 
-  (* briques *)
+  (* briques*)
   List.iter (fun b ->
     if b.alive then begin
-      (* Couleur selon valeur *)
       let color = match b.value with
         | 50 -> Graphics.green
         | 100 -> Graphics.yellow
@@ -66,12 +66,11 @@ let draw_state etat =
   (* Affichage power-ups *)
   List.iter (fun pup ->
     if pup.active then begin
-      (* Couleur selon type *)
       let color = match pup.ptype with
         | PaddleWide -> Graphics.cyan
         | BallSlow -> Graphics.blue
         | ExtraLife -> Graphics.yellow
-        | PaddleNarrow -> Graphics.green  
+        | PaddleNarrow -> Graphics.red
       in
       Graphics.set_color color;
       Graphics.fill_circle (int_of_float pup.x) (int_of_float pup.y) 8
@@ -91,7 +90,6 @@ let draw flux_etat =
       Graphics.synchronize ();
       Unix.sleepf Init.dt;
       loop flux_etat' (score etat)
-    | _ -> assert false
   in
   Graphics.open_graph graphic_format;
   Graphics.auto_synchronize false;
@@ -124,9 +122,9 @@ let draw flux_etat =
       match key with
       | 'r' | 'R' -> 
           Graphics.clear_graph ();
-          true  (* Rejouer *)
+          true
       | 'q' | 'Q' -> 
-          false  (* Quitter *)
+          false
       | _ -> 
           Unix.sleepf 0.01;
           wait_choice ()
