@@ -1,0 +1,11 @@
+(test
+ (name test_unit)
+ (modules test_unit)
+ (libraries ounit2 libnewtonoid)
+)
+
+(test
+ (name test_system)
+ (modules test_system)
+ (libraries ounit2 libnewtonoid)
+)
