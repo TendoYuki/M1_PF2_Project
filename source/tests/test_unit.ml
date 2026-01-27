@@ -3,14 +3,18 @@ open Libnewtonoid
 
 (* --------------------------------- Helpers --------------------------------- *)
 
+(* pour afficher les vecteurs *)
 let show_vec v =
   Printf.sprintf "(x=%.3f, y=%.3f)" (Vector.x v) (Vector.y v)
 
+
+(* pour afficher le titre *)
 let print_header title =
   Printf.printf "\n=== %s ===\n%!" title
 
 (*--------------------------------- Tests Vector --------------------------------- *)
 
+(* *)
 let test_vector_make _ =
   print_header "Vector.make";
   let v = Vector.make 3. 4. in
@@ -18,6 +22,7 @@ let test_vector_make _ =
   assert_equal 3. (Vector.x v);
   assert_equal 4. (Vector.y v)
 
+(* *)
 let test_vector_add _ =
   print_header "Vector.add";
   let v1 = Vector.make 1. 2. in
@@ -28,6 +33,7 @@ let test_vector_add _ =
   assert_equal 4. (Vector.x v);
   assert_equal 6. (Vector.y v)
 
+(* *)
 let test_vector_scale _ =
   print_header "Vector.scale";
   let v = Vector.make 2. 3. in
@@ -38,6 +44,7 @@ let test_vector_scale _ =
 
 (*--------------------------------- Tests Physics.integrate --------------------------------- *)
 
+(* *)
 let test_integrate _ =
   print_header "Physics.integrate";
   let pos = Vector.make 0. 0. in
@@ -53,6 +60,7 @@ let test_integrate _ =
   
 (*--------------------------------- Tests Collision.circle_aabb --------------------------------- *)
 
+(* *)
 let test_collision_hit _ =
   print_header "Collision.circle_aabb (hit)";
   let center = Vector.make 5. 5. in
@@ -61,6 +69,7 @@ let test_collision_hit _ =
   assert_bool "Collision attendue"
     (Collision.circle_aabb center 5. rect)
 
+(* *)
 let test_collision_miss _ =
   print_header "Collision.circle_aabb (miss)";
   let center = Vector.make 0. 0. in
@@ -71,6 +80,7 @@ let test_collision_miss _ =
 
 (*--------------------------------- Tests Constants --------------------------------- *)
 
+(* *)
 let test_constants _ =
   print_header "Constants";
   Printf.printf "dt=%f gravity=%s\n%!"
@@ -80,6 +90,7 @@ let test_constants _ =
 
 (*--------------------------------- Suite de tests --------------------------------- *)
 
+(* *)
 let suite =
   "Newtonoid Unit Tests" >::: [
     "vector_make" >:: test_vector_make;

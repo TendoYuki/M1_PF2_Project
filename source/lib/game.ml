@@ -60,7 +60,7 @@ let ball_on_paddle paddle speed =
   }
 
 (* État de départ *)
-let init_state = {
+let init_state : Types.etat = {
   ball = ball_on_paddle init_paddle 1.0;
   paddle = init_paddle;
   bricks = generate_random_level ();  
