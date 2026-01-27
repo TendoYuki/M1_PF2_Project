@@ -60,7 +60,7 @@ let ball_on_paddle paddle speed =
   }
 
 (* État de départ *)
-let init_state : Types.etat = {
+let init_state = {
   ball = ball_on_paddle init_paddle 1.0;
   paddle = init_paddle;
   bricks = generate_random_level ();  
@@ -194,13 +194,10 @@ let step etat =
       ) ([], 0, []) nearby_bricks
     in
     
-    print_endline "Début reconstruction QuadTree..."; flush stdout;
     (* Reconstruire le QuadTree SEULEMENT si brique cassée *)
     let new_qtree = 
       if !brick_was_hit then begin
-        print_endline "Brique cassée, reconstruction..."; flush stdout;
         let all_existing_bricks = Quadtree.to_list etat.bricks in
-        print_endline (Printf.sprintf "Total briques existantes: %d" (List.length all_existing_bricks)); flush stdout;
         
         let all_updated_bricks = 
           List.map (fun orig_brick ->
@@ -212,21 +209,16 @@ let step etat =
             | None -> orig_brick
           ) all_existing_bricks
         in
-        print_endline (Printf.sprintf "Briques après mise à jour: %d" (List.length all_updated_bricks)); flush stdout;
         
-        print_endline "Début création nouveau QuadTree..."; flush stdout;
         let qt = List.fold_left (fun qt brick ->
           Quadtree.insert qt brick brick.x brick.y
         ) (Quadtree.create 0. 0. 800. 600.) all_updated_bricks
         in
-        print_endline "Nouveau QuadTree créé !"; flush stdout;
         qt
       end else begin
-        print_endline "Pas de brique cassée, QuadTree inchangé"; flush stdout;
         etat.bricks
       end
     in
-    print_endline "Fin reconstruction QuadTree"; flush stdout;
 
     (* Mise à jour power-ups - étape 1: déplacer *)
     let powerups_moved = 

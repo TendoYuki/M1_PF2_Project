@@ -84,11 +84,9 @@ let score etat : int = etat.score
 
 let draw flux_etat =
   let rec loop flux_etat last_score =
-    print_endline "Loop iteration"; flush stdout;
     match Flux.(uncons flux_etat) with
     | None -> last_score
     | Some (etat, flux_etat') ->
-      print_endline "Drawing state"; flush stdout;
       Graphics.clear_graph ();
       draw_state etat;
       Graphics.synchronize ();
@@ -149,13 +147,9 @@ let draw flux_etat =
 
 (* on lance le jeu *)
 let () =
-  print_endline "Démarrage du jeu...";
   let rec game_loop () =
-    print_endline "Création du flux...";
     let flux = flux_etat init_state in
-    print_endline "Ouverture de la fenêtre...";
     let replay = draw flux in
-    print_endline "Fin de la partie";
     if replay then game_loop ()
   in
   game_loop ()
