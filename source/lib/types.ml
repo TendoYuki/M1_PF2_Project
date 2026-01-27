@@ -34,8 +34,8 @@ type powerup_type =
 
 (* Un power-up  *)
 type powerup = {
-  x : float;
-  y : float;
+  xp : float;
+  yp : float;
   vy : float;
   ptype : powerup_type;
   active : bool;
@@ -45,7 +45,7 @@ type powerup = {
 type etat = {
   ball : ball;
   paddle : paddle;
-  bricks : brick list;
+  bricks : brick Quadtree.t;
   score : int;
   lives : int;
   stuck : bool;

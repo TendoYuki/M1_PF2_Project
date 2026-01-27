@@ -3,6 +3,7 @@ open Iterator
 open Game
 open Vector
 open Types
+open Quadtree
 
 module Init = struct
   let dt = 1. /. 60. (* 60 Hz *)
@@ -42,7 +43,8 @@ let draw_state etat =
   Graphics.fill_rect (int_of_float (px -. w /. 2.)) 20
     (int_of_float w) (int_of_float h);
 
-  (* briques*)
+  (* briques - CONVERTIR LE QUADTREE EN LISTE *)
+  let all_bricks = Quadtree.to_list etat.bricks in
   List.iter (fun b ->
     if b.alive then begin
       let color = match b.value with
@@ -56,7 +58,7 @@ let draw_state etat =
       Graphics.fill_rect (int_of_float b.x) (int_of_float b.y)
         (int_of_float b.w) (int_of_float b.h)
     end
-  ) etat.bricks;
+  ) all_bricks;
 
   (* Affichage score et vies *)
   Graphics.set_color Graphics.white;
@@ -73,7 +75,7 @@ let draw_state etat =
         | PaddleNarrow -> Graphics.red
       in
       Graphics.set_color color;
-      Graphics.fill_circle (int_of_float pup.x) (int_of_float pup.y) 8
+      Graphics.fill_circle (int_of_float pup.xp) (int_of_float pup.yp) 8
     end
   ) etat.powerups
 
@@ -82,9 +84,11 @@ let score etat : int = etat.score
 
 let draw flux_etat =
   let rec loop flux_etat last_score =
+    print_endline "Loop iteration"; flush stdout;
     match Flux.(uncons flux_etat) with
     | None -> last_score
     | Some (etat, flux_etat') ->
+      print_endline "Drawing state"; flush stdout;
       Graphics.clear_graph ();
       draw_state etat;
       Graphics.synchronize ();
@@ -145,9 +149,13 @@ let draw flux_etat =
 
 (* on lance le jeu *)
 let () =
+  print_endline "Démarrage du jeu...";
   let rec game_loop () =
+    print_endline "Création du flux...";
     let flux = flux_etat init_state in
+    print_endline "Ouverture de la fenêtre...";
     let replay = draw flux in
+    print_endline "Fin de la partie";
     if replay then game_loop ()
   in
   game_loop ()

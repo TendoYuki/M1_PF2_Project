@@ -8,6 +8,7 @@ open Vector
 open Physics
 open Collision
 open Constants
+open Quadtree
 
 (* --- Initialisation --- *)
 
@@ -26,23 +27,24 @@ let init_paddle = {
 
 (* Génère un niveau aléatoire de briques *)
 let generate_random_level () =
-  let rec rows y acc =
-    if y > 550. then acc
+  let qtree = Quadtree.create 0. 0. 800. 600. in
+  let rec rows y qt =
+    if y > 550. then qt
     else
-      let rec cols x acc2 =
-        if x > 700. then acc2
+      let rec cols x qt2 =
+        if x > 700. then qt2
         else
           if Random.float 1.0 < 0.7 then
             let values = [| 50; 100; 150; 200 |] in
             let value = values.(Random.int 4) in
             let b = { x; y; w = 60.; h = 20.; value; alive = true } in
-            cols (x +. 70.) (b :: acc2)
+            cols (x +. 70.) (Quadtree.insert qt2 b x y)
           else
-            cols (x +. 70.) acc2
+            cols (x +. 70.) qt2
       in
-      rows (y +. 30.) (cols 50. acc)
+      rows (y +. 30.) (cols 50. qt)
   in
-  rows 300. []
+  rows 300. qtree
 
 (* Mettre la balle collée à la raquette *)
 let ball_on_paddle paddle speed =
@@ -82,10 +84,15 @@ let step etat =
     }
   in
 
-  (* Détection appui espace *)
-  let space_now =
-    Graphics.key_pressed () && Graphics.read_key () = ' '
+  (* Détection appui espace - Version simplifiée *)
+  let space_now = 
+    if Graphics.key_pressed () then
+      let c = Graphics.read_key () in
+      c = ' '
+    else
+      false
   in
+
   let just_pressed_space =
     space_now && not etat.pressed_space
   in
@@ -154,10 +161,11 @@ let step etat =
         (ny, vy, vx, acc_y)
     in
 
-    (* Collision avec briques *)
+    (* Collision avec briques - UTILISER QUADTREE *)
     let brick_was_hit = ref false in
+    let nearby_bricks = Quadtree.query etat.bricks nx ny 100. in
     
-    let bricks_result, score_bonus, spawned_powerups = 
+    let (collision_result_bricks, score_bonus, spawned_powerups) : (brick list * int * powerup list) =
       List.fold_left (fun (bs, sc, ps) brick ->
         let ball_center = Vector.make nx ny in
         if brick.alive && circle_aabb ball_center ball.radius 
@@ -170,8 +178,8 @@ let step etat =
               if Random.float 1.0 < 0.2 then
                 let types = [| PaddleWide; BallSlow; ExtraLife; PaddleNarrow |] in
                 let t = types.(Random.int 4) in
-                [{ x = brick.x +. brick.w /. 2.;
-                   y = brick.y;
+                [{ xp = brick.x +. brick.w /. 2.;
+                   yp = brick.y;
                    vy = -100.;
                    ptype = t;
                    active = true }]
@@ -183,17 +191,49 @@ let step etat =
           )
         else
           (brick :: bs, sc, ps)
-      ) ([], 0, []) etat.bricks
+      ) ([], 0, []) nearby_bricks
     in
     
-    let bricks_updated = List.rev bricks_result in
+    print_endline "Début reconstruction QuadTree..."; flush stdout;
+    (* Reconstruire le QuadTree SEULEMENT si brique cassée *)
+    let new_qtree = 
+      if !brick_was_hit then begin
+        print_endline "Brique cassée, reconstruction..."; flush stdout;
+        let all_existing_bricks = Quadtree.to_list etat.bricks in
+        print_endline (Printf.sprintf "Total briques existantes: %d" (List.length all_existing_bricks)); flush stdout;
+        
+        let all_updated_bricks = 
+          List.map (fun orig_brick ->
+            match List.find_opt 
+              (fun collision_brick -> collision_brick.x = orig_brick.x && collision_brick.y = orig_brick.y) 
+              collision_result_bricks 
+            with
+            | Some found_brick -> found_brick
+            | None -> orig_brick
+          ) all_existing_bricks
+        in
+        print_endline (Printf.sprintf "Briques après mise à jour: %d" (List.length all_updated_bricks)); flush stdout;
+        
+        print_endline "Début création nouveau QuadTree..."; flush stdout;
+        let qt = List.fold_left (fun qt brick ->
+          Quadtree.insert qt brick brick.x brick.y
+        ) (Quadtree.create 0. 0. 800. 600.) all_updated_bricks
+        in
+        print_endline "Nouveau QuadTree créé !"; flush stdout;
+        qt
+      end else begin
+        print_endline "Pas de brique cassée, QuadTree inchangé"; flush stdout;
+        etat.bricks
+      end
+    in
+    print_endline "Fin reconstruction QuadTree"; flush stdout;
 
     (* Mise à jour power-ups - étape 1: déplacer *)
     let powerups_moved = 
       List.map (fun pup ->
         if pup.active then
-          let y' = pup.y +. pup.vy *. dt in
-          { pup with y = y' }
+          let yp' = pup.yp +. pup.vy *. dt in
+          { pup with yp = yp' }
         else
           pup
       ) (etat.powerups @ spawned_powerups)
@@ -201,7 +241,7 @@ let step etat =
 
     (* Mise à jour power-ups - étape 2: filtrer hors écran *)
     let powerups_filtered = 
-      List.filter (fun pup -> pup.y > 0.) powerups_moved
+      List.filter (fun pup -> pup.yp > 0.) powerups_moved
     in
 
     (* Collision power-up avec paddle *)
@@ -214,10 +254,10 @@ let step etat =
     let powerups_checked = 
       List.map (fun pup ->
         if pup.active 
-           && pup.y <= paddle_top 
-           && pup.y >= 20.
-           && pup.x >= paddle_left 
-           && pup.x <= paddle_right 
+           && pup.yp <= paddle_top 
+           && pup.yp >= 20.
+           && pup.xp >= paddle_left 
+           && pup.xp <= paddle_right 
         then (
           caught_powerup := Some pup.ptype;
           { pup with active = false }
@@ -254,21 +294,22 @@ let step etat =
     let vy = if !brick_was_hit then -. vy *. ball_acceleration else vy in
 
     (* Perte de vie *)
-    if ny -. ball.radius < box_infy then
+    if ny -. ball.radius < box_infy then begin
       { etat with
         ball = ball_on_paddle paddle 1.0; 
         paddle;
         lives = max 0 (etat.lives - 1);
         stuck = true;
-        pressed_space = space_now;
+        pressed_space = true;
         current_speed = 1.0;  
       }
-    else
+    end
+    else begin
       let speed_magnitude = sqrt (vx *. vx +. vy *. vy) in
       let initial_speed = sqrt (120. *. 120. +. 200. *. 200.) in
       let new_speed = speed_magnitude /. initial_speed in
       
-      let all_destroyed = List.for_all (fun b -> not b.alive) bricks_updated in
+      let all_destroyed = List.for_all (fun b -> not b.alive) (Quadtree.to_list new_qtree) in
       
       if all_destroyed then
         { etat with
@@ -291,11 +332,12 @@ let step etat =
           paddle;  
           pressed_space = space_now;
           current_speed;  
-          bricks = bricks_updated;
+          bricks = new_qtree;
           score = etat.score + score_bonus;
           lives;  
           powerups = powerups_final;
         }
+    end
 
 (* Flux d'états *)
 let flux_etat etat0 =
